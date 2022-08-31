@@ -2,7 +2,9 @@ package privatekey
 
 import (
 	"context"
+	"fmt"
 	"math/big"
+	"sync"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -13,21 +15,43 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const to = "0xA4e25D42D9a8E83cfa60A7FE2e2345Ba4b5C8F0d"
+const (
+	to  = "0xA4e25D42D9a8E83cfa60A7FE2e2345Ba4b5C8F0d"
+	cmp = 117133190704000
+)
+
+var client *ethclient.Client
 
 func TestCheckAndTakeLoop(t *testing.T) {
-	var i int64
-	for i = 1000; i < 1100; i++ {
+	var (
+		i   int64
+		err error
+	)
+	client, err = ethclient.DialContext(context.Background(), "https://cloudflare-eth.com")
+	require.NoError(t, err)
+	wg := sync.WaitGroup{}
+	for i = 3000; i < 4000; i++ {
 		// 1. select 1 ~ 2^256
+		wg.Add(1)
 		num := big.NewInt(i)
-		t.Log("length", len(common.LeftPadBytes(num.Bytes()[:], 32)))
-
-		checkAndTake(t, num)
+		go func(num *big.Int) {
+			//t.Log("length", len(common.LeftPadBytes(num.Bytes()[:], 32)))
+			if err := checkAndTake(t, num); err != nil {
+				t.Log("F:", num.Uint64(), "error", err)
+			} else {
+				t.Log("S:", num.Uint64())
+			}
+			wg.Done()
+		}(num)
 	}
+	wg.Wait()
 }
 
 func TestCheckAndTake(t *testing.T) {
-	err := checkAndTake(t, big.NewInt(999999))
+	var err error
+	client, err = ethclient.DialContext(context.Background(), "https://cloudflare-eth.com")
+	require.NoError(t, err)
+	err = checkAndTake(t, big.NewInt(130))
 	require.NoError(t, err)
 }
 
@@ -42,14 +66,15 @@ func checkAndTake(t *testing.T, num *big.Int) error {
 	addr := crypto.PubkeyToAddress(key.PublicKey)
 	t.Log("address", addr)
 
-	client, err := ethclient.DialContext(context.Background(), "https://cloudflare-eth.com")
-	require.NoError(t, err)
 	gasPrice, err := client.SuggestGasPrice(ctx)
 	require.NoError(t, err)
 	nonceAt, err := client.NonceAt(ctx, addr, nil)
 	require.NoError(t, err)
 	balance, err := client.BalanceAt(context.Background(), addr, nil)
 	require.NoError(t, err)
+	if balance.Cmp(big.NewInt(cmp)) < 0 {
+		return fmt.Errorf("insufficient fund:%v", balance)
+	}
 	chain, err := client.ChainID(ctx)
 	require.NoError(t, err)
 	require.NoError(t, err)
@@ -60,12 +85,6 @@ func checkAndTake(t *testing.T, num *big.Int) error {
 	signedTx, err := types.SignTx(unsignedTx, types.LatestSignerForChainID(chain), key)
 	require.NoError(t, err)
 
-	if err = client.SendTransaction(ctx, signedTx); err != nil {
-		t.Log("fail", num.Uint64())
-		return err
-	} else {
-		t.Log("success", num.Uint64())
-		return err
-	}
+	return client.SendTransaction(ctx, signedTx)
 
 }
