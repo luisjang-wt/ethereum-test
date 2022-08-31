@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,22 +21,39 @@ const (
 	cmp = 117133190704000
 )
 
-var client *ethclient.Client
+var (
+	client *ethclient.Client
+	urls   = []string{
+		"https://cloudflare-eth.com",
+		//"https://http-pwemix.phnxops.in",
+	}
+)
+
+func getHost() string {
+	//return urls[rand.Int31n(2)]
+	return urls[0]
+}
 
 func TestCheckAndTakeLoop(t *testing.T) {
 	var (
-		i   int64
+		i   decimal.Decimal
 		err error
 	)
-	client, err = ethclient.DialContext(context.Background(), "https://cloudflare-eth.com")
+	// 뽑기.
+	//start, err := decimal.NewFromString("45979977666192131123124453456476567568568657655498755827359801234578023489675")
+	start, err := decimal.NewFromString("1")
+	require.NoError(t, err)
+	host := getHost()
+	t.Log("host", host)
+	client, err = ethclient.DialContext(context.Background(), host)
 	require.NoError(t, err)
 	wg := sync.WaitGroup{}
-	for i = 3000; i < 4000; i++ {
+	for i = start; i.Cmp(start.Add(decimal.New(100, 0))) < 0; i = i.Add(decimal.New(1, 0)) {
 		// 1. select 1 ~ 2^256
 		wg.Add(1)
-		num := big.NewInt(i)
+		num, ok := new(big.Int).SetString(fmt.Sprintf("%v", i), 10)
+		require.Equal(t, true, ok)
 		go func(num *big.Int) {
-			//t.Log("length", len(common.LeftPadBytes(num.Bytes()[:], 32)))
 			if err := checkAndTake(t, num); err != nil {
 				t.Log("F:", num.Uint64(), "error", err)
 			} else {
@@ -49,7 +67,7 @@ func TestCheckAndTakeLoop(t *testing.T) {
 
 func TestCheckAndTake(t *testing.T) {
 	var err error
-	client, err = ethclient.DialContext(context.Background(), "https://cloudflare-eth.com")
+	client, err = ethclient.DialContext(context.Background(), getHost())
 	require.NoError(t, err)
 	err = checkAndTake(t, big.NewInt(130))
 	require.NoError(t, err)

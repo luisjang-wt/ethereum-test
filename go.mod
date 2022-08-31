@@ -4,6 +4,7 @@ go 1.18
 
 require (
 	github.com/ethereum/go-ethereum v1.10.23
+	github.com/shopspring/decimal v1.3.1
 	github.com/stretchr/testify v1.8.0
 )
 
