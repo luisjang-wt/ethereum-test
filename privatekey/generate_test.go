@@ -25,7 +25,6 @@ var (
 	client *ethclient.Client
 	urls   = []string{
 		"https://cloudflare-eth.com",
-		//"https://http-pwemix.phnxops.in",
 	}
 )
 
